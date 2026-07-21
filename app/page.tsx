@@ -1,12 +1,29 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/set-state-in-effect */
 import React, {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+
+type Language = "en" | "ru";
+const LocaleContext = createContext<{
+  language: Language;
+  setLanguage: (language: Language) => void;
+}>({ language: "en", setLanguage: () => {} });
+function useLocale() {
+  const { language, setLanguage } = useContext(LocaleContext);
+  return {
+    language,
+    setLanguage,
+    tr: (english: string, russian: string) =>
+      language === "en" ? english : russian,
+  };
+}
 
 type Alert = {
   id: string;
@@ -69,6 +86,24 @@ function batchDay(timestamp: string) {
 }
 
 export default function Home() {
+  const [language, setLanguage] = useState<Language>("en");
+  useEffect(() => {
+    const saved = localStorage.getItem("wazuh-language");
+    if (saved === "ru") setLanguage("ru");
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("wazuh-language", language);
+    document.documentElement.lang = language;
+  }, [language]);
+  return (
+    <LocaleContext.Provider value={{ language, setLanguage }}>
+      <Journal />
+    </LocaleContext.Provider>
+  );
+}
+
+function Journal() {
+  const { language, setLanguage, tr } = useLocale();
   const [alerts, setAlerts] = useState<Alert[]>([]),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
@@ -245,7 +280,7 @@ export default function Home() {
         params.set("to", new Date(`${dateTo}T23:59:59`).toISOString());
       const r = await fetch(`/api/alerts?${params}`, { cache: "no-store" }),
         data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Wazuh недоступен");
+      if (!r.ok) throw new Error(data.error || tr("Wazuh unavailable", "Wazuh недоступен"));
       setAlerts(
         (data.alerts || []).sort((a: Alert, b: Alert) =>
           b.timestamp.localeCompare(a.timestamp),
@@ -264,7 +299,7 @@ export default function Home() {
             window.scrollBy({ top: next.getBoundingClientRect().top - top });
         });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
+      setError(e instanceof Error ? e.message : tr("Loading error", "Ошибка загрузки"));
     } finally {
       loadInFlight.current = false;
       setLoading(false);
@@ -309,7 +344,7 @@ export default function Home() {
       setHasMore(Boolean(data.hasMore));
       setNextCursor(data.nextCursor || null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка архива");
+      setError(e instanceof Error ? e.message : tr("Archive error", "Ошибка архива"));
     } finally {
       setLoadingMore(false);
     }
@@ -339,13 +374,13 @@ export default function Home() {
           body: JSON.stringify(settings),
         }),
         data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Ошибка сохранения");
-      setSaveMessage("Настройки сохранены");
+      if (!response.ok) throw new Error(data.error || tr("Save error", "Ошибка сохранения"));
+      setSaveMessage(tr("Settings saved", "Настройки сохранены"));
       await checkIntegrations();
       await load();
     } catch (error) {
       setSaveMessage(
-        error instanceof Error ? error.message : "Ошибка сохранения",
+        error instanceof Error ? error.message : tr("Save error", "Ошибка сохранения"),
       );
     } finally {
       setSaving(false);
@@ -367,14 +402,14 @@ export default function Home() {
         }),
         data = await response.json();
       if (!response.ok)
-        throw new Error(data.error || "Не удалось получить модели");
+        throw new Error(data.error || tr("Unable to retrieve models", "Не удалось получить модели"));
       setAiModels(data.models || []);
       if (!settings.OPENAI_MODEL && data.models?.[0])
         setSetting("OPENAI_MODEL", data.models[0]);
-      setSaveMessage(`Получено моделей: ${data.models?.length || 0}`);
+      setSaveMessage(`${tr("Models received", "Получено моделей")}: ${data.models?.length || 0}`);
     } catch (error) {
       setSaveMessage(
-        error instanceof Error ? error.message : "Ошибка получения моделей",
+        error instanceof Error ? error.message : tr("Model retrieval error", "Ошибка получения моделей"),
       );
     } finally {
       setModelsLoading(false);
@@ -452,7 +487,7 @@ export default function Home() {
           body: JSON.stringify({ alerts: alertsToAnalyze }),
         }),
         data = await r.json();
-      if (!r.ok) throw new Error(data.error || "AI недоступен");
+      if (!r.ok) throw new Error(data.error || tr("AI unavailable", "AI недоступен"));
       setAnalysis(data);
       setAnalyzedIds(
         (current) =>
@@ -460,7 +495,7 @@ export default function Home() {
       );
       await loadAnalysisHistory();
     } catch (e) {
-      setAnalysisError(e instanceof Error ? e.message : "Ошибка анализа");
+      setAnalysisError(e instanceof Error ? e.message : tr("Analysis error", "Ошибка анализа"));
     } finally {
       setAnalyzing(false);
     }
@@ -480,17 +515,17 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok)
-        throw new Error(data.error || "Не удалось добавить правило");
+        throw new Error(data.error || tr("Unable to add rule", "Не удалось добавить правило"));
       setRuleAddState("added");
-      setRuleNotice("Правило добавлено, Wazuh Manager перезапущен");
+      setRuleNotice(tr("Rule added; Wazuh Manager restarted", "Правило добавлено, Wazuh Manager перезапущен"));
       await loadAnalysisHistory();
       window.setTimeout(() => setRuleNotice(""), 5000);
     } catch (error) {
       setRuleAddState("idle");
       setRuleAddError(
-        error instanceof Error ? error.message : "Ошибка добавления правила",
+        error instanceof Error ? error.message : tr("Rule add error", "Ошибка добавления правила"),
       );
-      setRuleNotice("Не удалось добавить правило");
+      setRuleNotice(tr("Unable to add rule", "Не удалось добавить правило"));
       window.setTimeout(() => setRuleNotice(""), 5000);
     }
   };
@@ -516,23 +551,27 @@ export default function Home() {
             className={tab === "feed" ? "nav-active" : ""}
             onClick={() => setTab("feed")}
           >
-            Лента
+            {tr("Feed", "Лента")}
           </button>
           <button
             className={tab === "rules" ? "nav-active" : ""}
             onClick={() => setTab("rules")}
           >
-            Правила
+            {tr("Rules", "Правила")}
           </button>
           <button
             className={historyOpen ? "nav-active" : ""}
             onClick={() => setHistoryOpen(true)}
           >
-            Анализы
+            {tr("Analyses", "Анализы")}
             {analysisHistory.length ? ` · ${analysisHistory.length}` : ""}
-            {unreadAnalysisIds.size ? ` · новые ${unreadAnalysisIds.size}` : ""}
+            {unreadAnalysisIds.size ? ` · ${tr("new", "новые")} ${unreadAnalysisIds.size}` : ""}
           </button>
-          <button onClick={openSettings}>Настройки</button>
+          <button onClick={openSettings}>{tr("Settings", "Настройки")}</button>
+          <div className="language-switch" role="group" aria-label={tr("Language", "Язык")}>
+            <button className={language === "en" ? "nav-active" : ""} onClick={() => setLanguage("en")}>EN</button>
+            <button className={language === "ru" ? "nav-active" : ""} onClick={() => setLanguage("ru")}>RU</button>
+          </div>
         </nav>
         <div className="user">
           <span className={`status-dot ${health.wazuh.ok ? "" : "offline"}`} />
@@ -543,7 +582,7 @@ export default function Home() {
           <button
             className="avatar avatar-button"
             onClick={openSettings}
-            aria-label="Открыть настройки"
+            aria-label={tr("Open settings", "Открыть настройки")}
           >
             SOC
           </button>
@@ -553,17 +592,17 @@ export default function Home() {
         <div>
           <small>WAZUH</small>
           <b className={health.wazuh.ok ? "ok" : "bad"}>
-            {health.wazuh.ok ? "ПОДКЛЮЧЕН" : "НЕДОСТУПЕН"}
+            {health.wazuh.ok ? tr("CONNECTED", "ПОДКЛЮЧЕН") : tr("UNAVAILABLE", "НЕДОСТУПЕН")}
           </b>
         </div>
         <div>
           <small>AI API</small>
           <b className={health.ai.ok ? "ok" : "bad"}>
-            {health.ai.ok ? "НАСТРОЕН" : "НЕ НАСТРОЕН"}
+            {health.ai.ok ? tr("CONFIGURED", "НАСТРОЕН") : tr("NOT CONFIGURED", "НЕ НАСТРОЕН")}
           </b>
         </div>
         <button onClick={load} disabled={loading}>
-          {loading ? "ОБНОВЛЕНИЕ…" : "ОБНОВИТЬ"}
+          {loading ? tr("REFRESHING…", "ОБНОВЛЕНИЕ…") : tr("REFRESH", "ОБНОВИТЬ")}
         </button>
       </section>
       <section className="workspace workspace-top">
@@ -574,10 +613,10 @@ export default function Home() {
             <div className="toolbar">
               <div className="date">
                 <span>
-                  <small>ЛОКАЛЬНАЯ ЛЕНТА</small>
+                  <small>{tr("LOCAL FEED", "ЛОКАЛЬНАЯ ЛЕНТА")}</small>
                   {updated
-                    ? new Date(updated).toLocaleString("ru-RU")
-                    : "Нет синхронизации"}
+                    ? new Date(updated).toLocaleString(language === "en" ? "en-US" : "ru-RU")
+                    : tr("Not synchronized", "Нет синхронизации")}
                 </span>
               </div>
               <div className="filter-groups">
@@ -586,7 +625,7 @@ export default function Home() {
                     className={filter === "all" ? "filter-primary" : ""}
                     onClick={() => setFilter("all")}
                   >
-                    Все
+                    {tr("All", "Все")}
                   </button>
                   <button
                     className={filter === "8to10" ? "filter-primary" : ""}
@@ -610,13 +649,13 @@ export default function Home() {
                     className={filter === "marked" ? "filter-primary" : ""}
                     onClick={() => setFilter("marked")}
                   >
-                    Помеченные
+                    {tr("Marked", "Помеченные")}
                   </button>
                   <button
                     className={filter === "skipped" ? "filter-primary" : ""}
                     onClick={() => setFilter("skipped")}
                   >
-                    Пропущенные
+                    {tr("Skipped", "Пропущенные")}
                   </button>
                 </div>
                 <div className="filters time-filters">
@@ -624,25 +663,25 @@ export default function Home() {
                     className={period === "all" ? "filter-primary" : ""}
                     onClick={() => setPeriod("all")}
                   >
-                    За всё время
+                    {tr("All time", "За всё время")}
                   </button>
                   <button
                     className={period === "hour" ? "filter-primary" : ""}
                     onClick={() => setPeriod("hour")}
                   >
-                    За последний час
+                    {tr("Last hour", "За последний час")}
                   </button>
                   <button
                     className={period === "today" ? "filter-primary" : ""}
                     onClick={() => setPeriod("today")}
                   >
-                    За сегодня
+                    {tr("Today", "За сегодня")}
                   </button>
                   <button
                     className={period === "range" ? "filter-primary" : ""}
                     onClick={() => setPeriod("range")}
                   >
-                    За период
+                    {tr("Date range", "За период")}
                   </button>
                   {period === "range" && (
                     <span className="period-controls">
@@ -688,7 +727,7 @@ export default function Home() {
                 onClick={loadMore}
                 disabled={loadingMore}
               >
-                {loadingMore ? "ЗАГРУЖАЮ…" : "ЗАГРУЗИТЬ ЕЩЁ 500 АЛЕРТОВ"}
+                {loadingMore ? tr("LOADING…", "ЗАГРУЖАЮ…") : tr("LOAD 500 MORE ALERTS", "ЗАГРУЗИТЬ ЕЩЁ 500 АЛЕРТОВ")}
               </button>
             )}
           </>
@@ -698,9 +737,9 @@ export default function Home() {
         <span>WAZUH JOURNAL / LOCAL</span>
         <span>
           <i className={`status-dot ${health.wazuh.ok ? "" : "offline"}`} /> SSH
-          · {health.wazuh.ok ? "ПОДКЛЮЧЕНО" : "НЕТ СВЯЗИ"}
+          · {health.wazuh.ok ? tr("CONNECTED", "ПОДКЛЮЧЕНО") : tr("OFFLINE", "НЕТ СВЯЗИ")}
         </span>
-        <span>ОБНОВЛЕНИЕ КАЖДЫЕ 30 СЕК</span>
+        <span>{tr("REFRESHES EVERY 30 SEC", "ОБНОВЛЕНИЕ КАЖДЫЕ 30 СЕК")}</span>
       </footer>
       {selected && (
         <div className="modal-backdrop" onMouseDown={() => setSelected(null)}>
@@ -709,15 +748,15 @@ export default function Home() {
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="panel-top">
-              <button className="analysis-back" onClick={() => { setSelected(null); setHistoryOpen(true); }} aria-label="Назад к истории">←</button>
-              <span className="ai-badge">✦ AI АНАЛИЗ</span>
+              <button className="analysis-back" onClick={() => { setSelected(null); setHistoryOpen(true); }} aria-label={tr("Back to history", "Назад к истории")}>←</button>
+              <span className="ai-badge">✦ {tr("AI ANALYSIS", "AI АНАЛИЗ")}</span>
               <button onClick={() => setSelected(null)}>×</button>
             </div>
             <div className="panel-heading">
               <Level value={selected.level} />
               <h2>
                 {selectedAnalysisCount > 1
-                  ? `Пачка · ${selectedAnalysisCount} алертов`
+                  ? `${tr("Batch", "Пачка")} · ${selectedAnalysisCount} ${tr("alerts", "алертов")}`
                   : selected.title}
               </h2>
               <p>
@@ -727,16 +766,16 @@ export default function Home() {
             {analyzing ? (
               <div className="loading">
                 <div className="orb">✦</div>
-                <h3>Анализирую сигнал</h3>
+                <h3>{tr("Analyzing signal", "Анализирую сигнал")}</h3>
                 <p>
                   {selectedAnalysisCount > 1
-                    ? `В AI API отправлена пачка из ${selectedAnalysisCount} алертов.`
-                    : "В AI API отправлен только выбранный алерт."}
+                    ? tr(`A batch of ${selectedAnalysisCount} alerts was sent to the AI API.`, `В AI API отправлена пачка из ${selectedAnalysisCount} алертов.`)
+                    : tr("Only the selected alert was sent to the AI API.", "В AI API отправлен только выбранный алерт.")}
                 </p>
               </div>
             ) : analysisError ? (
               <div className="connection-error">
-                <h3>Анализ недоступен</h3>
+                <h3>{tr("Analysis unavailable", "Анализ недоступен")}</h3>
                 <p>{analysisError}</p>
               </div>
             ) : (
@@ -744,7 +783,7 @@ export default function Home() {
                 <div className="result">
                   <section className="verdict">
                     <div>
-                      <small>ШАНС ЛОЖНОГО СРАБАТЫВАНИЯ</small>
+                      <small>{tr("FALSE POSITIVE PROBABILITY", "ШАНС ЛОЖНОГО СРАБАТЫВАНИЯ")}</small>
                       <strong>{analysis.falsePositive}%</strong>
                     </div>
                     <div className="meter">
@@ -753,18 +792,18 @@ export default function Home() {
                     <p>{analysis.verdict}</p>
                   </section>
                   <section>
-                    <small>КРАТКИЙ ВЫВОД</small>
+                    <small>{tr("SUMMARY", "КРАТКИЙ ВЫВОД")}</small>
                     <p>{analysis.summary}</p>
                   </section>
                   {analysis.exceptionExplanation && (
                     <section className="exception-explanation">
-                      <small>КАК РАБОТАЕТ ИСКЛЮЧЕНИЕ</small>
+                      <small>{tr("HOW THE EXCEPTION WORKS", "КАК РАБОТАЕТ ИСКЛЮЧЕНИЕ")}</small>
                       <p>{analysis.exceptionExplanation}</p>
                     </section>
                   )}
                   <section className="rule-box">
                     <div className="rule-label">
-                      <span>ЧЕРНОВИК ПРАВИЛА</span>
+                      <span>{tr("DRAFT RULE", "ЧЕРНОВИК ПРАВИЛА")}</span>
                       <span>XML</span>
                     </div>
                     <code>{analysis.ruleXml}</code>
@@ -779,17 +818,16 @@ export default function Home() {
                         }
                       >
                         {ruleAddState === "adding"
-                          ? "ДОБАВЛЯЮ И ПЕРЕЗАПУСКАЮ…"
+                          ? tr("ADDING AND RESTARTING…", "ДОБАВЛЯЮ И ПЕРЕЗАПУСКАЮ…")
                           : ruleAddState === "added"
-                            ? "ПРАВИЛО ДОБАВЛЕНО · MANAGER ПЕРЕЗАПУЩЕН"
-                            : "ДОБАВИТЬ ПРАВИЛО И ПЕРЕЗАПУСТИТЬ"}
+                            ? tr("RULE ADDED · MANAGER RESTARTED", "ПРАВИЛО ДОБАВЛЕНО · MANAGER ПЕРЕЗАПУЩЕН")
+                            : tr("ADD RULE AND RESTART", "ДОБАВИТЬ ПРАВИЛО И ПЕРЕЗАПУСТИТЬ")}
                       </button>
                       {ruleAddError && (
                         <p className="settings-error">{ruleAddError}</p>
                       )}
                       <small>
-                        Правило будет добавлено в группу исключений с уровнем 0
-                        и новым свободным номером.
+                        {tr("The rule will be added to the exceptions group with level 0 and a new available ID.", "Правило будет добавлено в группу исключений с уровнем 0 и новым свободным номером.")}
                       </small>
                     </div>
                   )}
@@ -809,18 +847,17 @@ export default function Home() {
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="panel-top">
-              <span className="ai-badge">✦ ИСТОРИЯ АНАЛИЗОВ</span>
+              <span className="ai-badge">✦ {tr("ANALYSIS HISTORY", "ИСТОРИЯ АНАЛИЗОВ")}</span>
               <button onClick={() => setHistoryOpen(false)}>×</button>
             </div>
             <div className="history-heading">
-              <h2>Разобранные сигналы</h2>
+              <h2>{tr("Analyzed signals", "Разобранные сигналы")}</h2>
               <p>
-                Последние анализы доступны для быстрого возврата к контексту и
-                решению AI.
+                {tr("Recent analyses let you quickly return to the context and AI decision.", "Последние анализы доступны для быстрого возврата к контексту и решению AI.")}
               </p>
             </div>
             {!analysisHistory.length ? (
-              <div className="empty-state">История пока пуста.</div>
+              <div className="empty-state">{tr("History is empty.", "История пока пуста.")}</div>
             ) : (
               <div className="history-list">
                 {analysisHistory.map((item) => {
@@ -856,18 +893,18 @@ export default function Home() {
                         <Level value={Number(alert.level) || 0} />
                         <strong>
                           {count > 1
-                            ? `Пачка · ${count} алертов`
-                            : String(alert.title || "Алерт")}
+                            ? `${tr("Batch", "Пачка")} · ${count} ${tr("alerts", "алертов")}`
+                            : String(alert.title || tr("Alert", "Алерт"))}
                         </strong>
                       </span>
                       <small>
                         {item.analysis.ruleAdded
-                          ? `Правило ${item.analysis.ruleId || ""} добавлено`
+                          ? `${tr("Rule", "Правило")} ${item.analysis.ruleId || ""} ${tr("added", "добавлено")}`
                           : item.analysis.status === "processing"
-                          ? "В обработке"
+                          ? tr("Processing", "В обработке")
                           : item.analysis.status === "error"
-                            ? "Ошибка"
-                            : new Date(item.analyzedAt).toLocaleString("ru-RU")}
+                            ? tr("Error", "Ошибка")
+                            : new Date(item.analyzedAt).toLocaleString(language === "en" ? "en-US" : "ru-RU")}
                         {!item.analysis.ruleAdded && item.analysis.status !== "error" && item.analysis.status !== "processing"
                           ? ` · ${String(alert.host || "")}`
                           : ""}
@@ -888,26 +925,26 @@ export default function Home() {
           <aside
             className="settings-panel"
             onMouseDown={(e) => e.stopPropagation()}
-            aria-label="Настройки"
+            aria-label={tr("Settings", "Настройки")}
           >
             <div className="settings-top">
-              <span className="settings-kicker">ЛОКАЛЬНАЯ КОНФИГУРАЦИЯ</span>
+              <span className="settings-kicker">{tr("LOCAL CONFIGURATION", "ЛОКАЛЬНАЯ КОНФИГУРАЦИЯ")}</span>
               <button
                 onClick={() => setSettingsOpen(false)}
-                aria-label="Закрыть"
+                aria-label={tr("Close", "Закрыть")}
               >
                 ×
               </button>
             </div>
             <div className="settings-scroll">
               <div className="settings-heading">
-                <h2>Настройки</h2>
-                <p>Подключения и секреты хранятся только на этом компьютере.</p>
+                <h2>{tr("Settings", "Настройки")}</h2>
+                <p>{tr("Connections and secrets are stored only on this computer.", "Подключения и секреты хранятся только на этом компьютере.")}</p>
               </div>
               <SettingsGroup
                 title="Wazuh SSH"
                 health={health.wazuh}
-                help="Для доступа через bastion укажите jump host. Ваш пример: jump host 150.241.76.111, пользователь root, порт 22; Wazuh host — localhost, пользователь wazuh-user, порт 2222. Это создаст ProxyJump-маршрут."
+                help={tr("For bastion access, specify a jump host. This creates a secure ProxyJump route to the Wazuh host.", "Для доступа через bastion укажите jump host. Это создаст защищённый ProxyJump-маршрут к Wazuh host.")}
               >
                 <Field
                   label="Wazuh host"
@@ -928,20 +965,20 @@ export default function Home() {
                   placeholder="wazuh-user"
                 />
                 <Field
-                  label="Путь к ключу"
+                  label={tr("Private key path", "Путь к ключу")}
                   value={settings.WAZUH_SSH_PRIVATE_KEY_PATH}
                   onChange={(v) => setSetting("WAZUH_SSH_PRIVATE_KEY_PATH", v)}
                   placeholder="~/.ssh/id_rsa_wazuh"
                 />
                 <Field
-                  label="Пароль SSH (альтернатива ключу)"
+                  label={tr("SSH password (key alternative)", "Пароль SSH (альтернатива ключу)")}
                   value={settings.WAZUH_SSH_PASSWORD}
                   onChange={(v) => setSetting("WAZUH_SSH_PASSWORD", v)}
                   secret
                   configured={Boolean(settings.WAZUH_SSH_PASSWORD_CONFIGURED)}
                 />
                 <Field
-                  label="Или содержимое ключа"
+                  label={tr("Or private key contents", "Или содержимое ключа")}
                   value={settings.WAZUH_SSH_PRIVATE_KEY}
                   onChange={(v) => setSetting("WAZUH_SSH_PRIVATE_KEY", v)}
                   secret
@@ -969,18 +1006,17 @@ export default function Home() {
                   placeholder="root"
                 />
                 <p className="fixed-command">
-                  <span>Источник событий</span>
+                  <span>{tr("Event source", "Источник событий")}</span>
                   <code>Wazuh Indexer · wazuh-alerts-*</code>
                   <small>
-                    Запрос выполняется напрямую к индексу через защищённое
-                    SSH-подключение.
+                    {tr("Queries run directly against the index over a secure SSH connection.", "Запрос выполняется напрямую к индексу через защищённое SSH-подключение.")}
                   </small>
                 </p>
               </SettingsGroup>
               <SettingsGroup
                 title="AI API"
                 health={health.ai}
-                help="Введите Base URL и API-ключ, затем запросите список моделей у OpenAI-совместимого провайдера."
+                help={tr("Enter the Base URL and API key, then request the model list from an OpenAI-compatible provider.", "Введите Base URL и API-ключ, затем запросите список моделей у OpenAI-совместимого провайдера.")}
               >
                 <Field
                   label="Base URL"
@@ -1006,7 +1042,7 @@ export default function Home() {
                       !settings.OPENAI_API_KEY_CONFIGURED)
                   }
                 >
-                  {modelsLoading ? "ЗАПРАШИВАЮ МОДЕЛИ…" : "ЗАПРОСИТЬ МОДЕЛИ"}
+                  {modelsLoading ? tr("REQUESTING MODELS…", "ЗАПРАШИВАЮ МОДЕЛИ…") : tr("REQUEST MODELS", "ЗАПРОСИТЬ МОДЕЛИ")}
                 </button>
                 <ModelField
                   value={settings.OPENAI_MODEL}
@@ -1022,14 +1058,14 @@ export default function Home() {
                 onClick={checkIntegrations}
                 disabled={checking}
               >
-                {checking ? "ПРОВЕРЯЮ…" : "ПРОВЕРИТЬ"}
+                {checking ? tr("CHECKING…", "ПРОВЕРЯЮ…") : tr("CHECK", "ПРОВЕРИТЬ")}
               </button>
               <button
                 className="check-button"
                 onClick={saveSettings}
                 disabled={saving}
               >
-                {saving ? "СОХРАНЯЮ…" : "СОХРАНИТЬ"}
+                {saving ? tr("SAVING…", "СОХРАНЯЮ…") : tr("SAVE", "СОХРАНИТЬ")}
               </button>
             </div>
           </aside>
@@ -1040,16 +1076,18 @@ export default function Home() {
 }
 
 function AuthLoading() {
+  const { tr } = useLocale();
   return (
     <main className="auth-screen">
       <div className="auth-card">
         <span className="brandmark">W</span>
-        <p>Проверяю доступ Wazuh…</p>
+        <p>{tr("Checking Wazuh access…", "Проверяю доступ Wazuh…")}</p>
       </div>
     </main>
   );
 }
 function Login({ onLogin }: { onLogin: (user: string) => void }) {
+  const { language, setLanguage, tr } = useLocale();
   const [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
     [error, setError] = useState(""),
@@ -1066,11 +1104,11 @@ function Login({ onLogin }: { onLogin: (user: string) => void }) {
         }),
         data = await response.json();
       if (!response.ok)
-        throw new Error(data.error || "Доменная авторизация не пройдена");
+        throw new Error(data.error || tr("Domain authentication failed", "Доменная авторизация не пройдена"));
       onLogin(String(data.user || username));
       setPassword("");
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Ошибка входа");
+      setError(error instanceof Error ? error.message : tr("Sign-in error", "Ошибка входа"));
     } finally {
       setLoading(false);
     }
@@ -1082,13 +1120,17 @@ function Login({ onLogin }: { onLogin: (user: string) => void }) {
           <span className="brandmark">W</span>
           <div>
             <b>Wazuh Journal</b>
-            <small>ДОМЕННЫЙ ДОСТУП</small>
+            <small>{tr("DOMAIN ACCESS", "ДОМЕННЫЙ ДОСТУП")}</small>
           </div>
         </div>
-        <h1>Вход в SOC</h1>
-        <p className="auth-help">Используйте доменную учётную запись Wazuh.</p>
+        <h1>{tr("Sign in to SOC", "Вход в SOC")}</h1>
+        <p className="auth-help">{tr("Use your Wazuh domain account.", "Используйте доменную учётную запись Wazuh.")}</p>
+        <div className="language-switch auth-language" role="group" aria-label={tr("Language", "Язык")}>
+          <button type="button" className={language === "en" ? "nav-active" : ""} onClick={() => setLanguage("en")}>EN</button>
+          <button type="button" className={language === "ru" ? "nav-active" : ""} onClick={() => setLanguage("ru")}>RU</button>
+        </div>
         <label>
-          <span>Доменный логин</span>
+          <span>{tr("Domain username", "Доменный логин")}</span>
           <input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
@@ -1098,7 +1140,7 @@ function Login({ onLogin }: { onLogin: (user: string) => void }) {
           />
         </label>
         <label>
-          <span>Пароль</span>
+          <span>{tr("Password", "Пароль")}</span>
           <input
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -1109,7 +1151,7 @@ function Login({ onLogin }: { onLogin: (user: string) => void }) {
         </label>
         {error && <p className="auth-error">{error}</p>}
         <button className="check-button" disabled={loading}>
-          {loading ? "ПРОВЕРЯЮ…" : "ВОЙТИ ЧЕРЕЗ WAZUH"}
+          {loading ? tr("CHECKING…", "ПРОВЕРЯЮ…") : tr("SIGN IN WITH WAZUH", "ВОЙТИ ЧЕРЕЗ WAZUH")}
         </button>
       </form>
     </main>
@@ -1127,13 +1169,14 @@ function SettingsGroup({
   help: string;
   children: React.ReactNode;
 }) {
+  const { tr } = useLocale();
   return (
     <section className="settings-group">
       <div className="settings-group-head">
         <span className={`status-dot ${health.ok ? "" : "offline"}`} />
         <h3>{title}</h3>
         <b className={health.ok ? "ok" : "bad"}>
-          {health.ok ? "РАБОТАЕТ" : "НЕ ПОДКЛЮЧЕНО"}
+          {health.ok ? tr("WORKING", "РАБОТАЕТ") : tr("NOT CONNECTED", "НЕ ПОДКЛЮЧЕНО")}
         </b>
       </div>
       <p className="settings-help-text">{help}</p>
@@ -1159,6 +1202,7 @@ function Field({
   configured?: boolean;
   multiline?: boolean;
 }) {
+  const { tr } = useLocale();
   const props = {
     value: typeof value === "string" ? value : "",
     onChange: (
@@ -1166,14 +1210,14 @@ function Field({
     ) => onChange(event.target.value),
     placeholder:
       secret && configured
-        ? "Сохранено — оставьте пустым, чтобы не менять"
+        ? tr("Saved — leave empty to keep unchanged", "Сохранено — оставьте пустым, чтобы не менять")
         : placeholder,
   };
   return (
     <label className={multiline ? "wide-field" : ""}>
       <span>
         {label}
-        {secret && configured && <i>СОХРАНЕНО</i>}
+        {secret && configured && <i>{tr("SAVED", "СОХРАНЕНО")}</i>}
       </span>
       {multiline ? (
         <textarea {...props} rows={4} />
@@ -1197,10 +1241,11 @@ function ModelField({
   models: string[];
   onChange: (value: string) => void;
 }) {
+  const { tr } = useLocale();
   const selected = typeof value === "string" ? value : "";
   return (
     <label className="wide-field">
-      <span>Модель</span>
+      <span>{tr("Model", "Модель")}</span>
       {models.length ? (
         <select
           value={selected}
@@ -1219,7 +1264,7 @@ function ModelField({
         <input
           value={selected}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Сначала запросите модели или введите название вручную"
+          placeholder={tr("Request models first or enter a model name", "Сначала запросите модели или введите название вручную")}
           autoComplete="off"
         />
       )}
@@ -1254,27 +1299,28 @@ function Feed({
   setSkipped: React.Dispatch<React.SetStateAction<Set<string>>>;
   analyzedIds: Set<string>;
 }) {
+  const { tr } = useLocale();
   if (error && !batches.length)
     return (
       <section className="connection-error">
         <small>WAZUH SSH</small>
-        <h1>Нет данных</h1>
+        <h1>{tr("No data", "Нет данных")}</h1>
         <p>{error}</p>
-        <button onClick={load}>Повторить подключение</button>
+        <button onClick={load}>{tr("Retry connection", "Повторить подключение")}</button>
       </section>
     );
-  if (loading) return <div className="empty-state">Получаю события Wazuh…</div>;
+  if (loading) return <div className="empty-state">{tr("Loading Wazuh events…", "Получаю события Wazuh…")}</div>;
   if (!batches.length)
     return (
       <div className="empty-state">
-        Пачка формируется. Она появится после 5 алертов или через 5 минут.
+        {tr("A batch is being created. It will appear after 5 alerts or 5 minutes.", "Пачка формируется. Она появится после 5 алертов или через 5 минут.")}
       </div>
     );
   return (
     <>
       {error && (
         <div className="background-error">
-          Не удалось обновить данные: {error}
+          {tr("Unable to refresh data", "Не удалось обновить данные")}: {error}
         </div>
       )}
       {batches.map((batch) => {
@@ -1297,17 +1343,17 @@ function Feed({
               <div className="batch-time">
                 <span>{batchDay(first)}</span>
                 <small>
-                  с {batchClock(last)}
+                  {tr("from", "с")} {batchClock(last)}
                   <br />
-                  до {batchClock(first)}
+                  {tr("to", "до")} {batchClock(first)}
                 </small>
               </div>
               <div className="severity">
                 <span>
-                  {batch.filter((a) => a.level >= 10).length} критичных
+                  {batch.filter((a) => a.level >= 10).length} {tr("critical", "критичных")}
                 </span>
                 <span className="hostcount">
-                  {new Set(batch.map((a) => a.host)).size} хостов
+                  {new Set(batch.map((a) => a.host)).size} {tr("hosts", "хостов")}
                 </span>
               </div>
               <span className="chevron">{isOpen ? "↑" : "↓"}</span>
@@ -1320,7 +1366,7 @@ function Feed({
                   analyze(batch);
                 }}
               >
-                Анализировать пачку <span>✦</span>
+                {tr("Analyze batch", "Анализировать пачку")} <span>✦</span>
               </button>
             )}
             {isOpen && (
@@ -1344,12 +1390,12 @@ function Feed({
                       </div>
                     </summary>
                     <div className="alert-detail">
-                      <h3>Что произошло</h3>
+                      <h3>{tr("What happened", "Что произошло")}</h3>
                       <p>
                         {a.story ||
-                          `На хосте ${a.host} сработало правило ${a.rule} — ${a.title}.`}
+                          tr(`Rule ${a.rule} triggered on host ${a.host} — ${a.title}.`, `На хосте ${a.host} сработало правило ${a.rule} — ${a.title}.`)}
                       </p>
-                      <h3>Ключевые данные</h3>
+                      <h3>{tr("Key details", "Ключевые данные")}</h3>
                       <dl>
                         {(a.fields || []).map(([label, value]) => (
                           <React.Fragment key={label}>
@@ -1361,7 +1407,7 @@ function Feed({
                       <div className="alert-actions">
                         {!analyzedIds.has(a.id) && (
                           <button className="analyze" onClick={() => analyze(a)}>
-                            Анализировать этот алерт <span>✦</span>
+                            {tr("Analyze this alert", "Анализировать этот алерт")} <span>✦</span>
                           </button>
                         )}
                         <button
@@ -1383,7 +1429,7 @@ function Feed({
                             });
                           }}
                         >
-                          {marked.has(a.id) ? "Снять пометку" : "Пометить"}
+                          {marked.has(a.id) ? tr("Unmark", "Снять пометку") : tr("Mark", "Пометить")}
                         </button>
                         <button
                           className={`secondary-button ${skipped.has(a.id) ? "action-active" : ""}`}
@@ -1404,7 +1450,7 @@ function Feed({
                             });
                           }}
                         >
-                          {skipped.has(a.id) ? "Вернуть" : "Пропустить"}
+                          {skipped.has(a.id) ? tr("Restore", "Вернуть") : tr("Skip", "Пропустить")}
                         </button>
                       </div>
                     </div>
@@ -1427,9 +1473,10 @@ function BatchPager({
   pages: number;
   onChange: (page: number) => void;
 }) {
+  const { tr } = useLocale();
   const numbers = Array.from({ length: pages }, (_, index) => index);
   return (
-    <nav className="batch-pager" aria-label="Страницы пачек">
+    <nav className="batch-pager" aria-label={tr("Batch pages", "Страницы пачек")}>
       <button disabled={page === 0} onClick={() => onChange(page - 1)}>
         ←
       </button>
@@ -1684,9 +1731,10 @@ function parseRuleGroups(xml: string): { prefix: string; groups: RuleGroup[] } {
   return { prefix: first >= 0 ? xml.slice(0, first) : "", groups };
 }
 function RuleConstructorV2() {
+  const { tr } = useLocale();
   const [prefix, setPrefix] = useState(""),
     [groups, setGroups] = useState<RuleGroup[]>([]),
-    [status, setStatus] = useState("Загрузка…"),
+    [status, setStatus] = useState(tr("Loading…", "Загрузка…")),
     [saving, setSaving] = useState(false);
   useEffect(() => {
     fetch("/api/rules", { cache: "no-store" })
@@ -1699,7 +1747,7 @@ function RuleConstructorV2() {
         setStatus("");
       })
       .catch((e) =>
-        setStatus(e instanceof Error ? e.message : "Ошибка загрузки"),
+        setStatus(e instanceof Error ? e.message : tr("Loading error", "Ошибка загрузки")),
       );
   }, []);
   const updateGroup = (index: number, patch: Partial<RuleGroup>) =>
@@ -1731,9 +1779,9 @@ function RuleConstructorV2() {
         body: JSON.stringify({ xml }),
       });
       if (!response.ok) throw new Error((await response.json()).error);
-      setStatus("Сохранено; резервная копия создана");
+      setStatus(tr("Saved; backup created", "Сохранено; резервная копия создана"));
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка сохранения");
+      setStatus(e instanceof Error ? e.message : tr("Save error", "Ошибка сохранения"));
     } finally {
       setSaving(false);
     }
@@ -1741,11 +1789,10 @@ function RuleConstructorV2() {
   return (
     <div className="rules-view">
       <div className="rules-heading">
-        <small>КОНСТРУКТОР ПРАВИЛ</small>
-        <h1>Правила Wazuh</h1>
+        <small>{tr("RULE BUILDER", "КОНСТРУКТОР ПРАВИЛ")}</small>
+        <h1>{tr("Wazuh Rules", "Правила Wazuh")}</h1>
         <p>
-          Служебные XML-поля скрыты. Редактируйте название группы, уровень и
-          содержимое правила.
+          {tr("Internal XML fields are hidden. Edit the group name, level, and rule contents.", "Служебные XML-поля скрыты. Редактируйте название группы, уровень и содержимое правила.")}
         </p>
       </div>
       <div className="rules-cards">
@@ -1756,7 +1803,7 @@ function RuleConstructorV2() {
           >
             <summary className="rule-group-head">
               <div>
-                <small>{group.exception ? "ИСКЛЮЧЕНИЯ" : "ГРУППА"}</small>
+                <small>{group.exception ? tr("EXCEPTIONS", "ИСКЛЮЧЕНИЯ") : tr("GROUP", "ГРУППА")}</small>
                 <input
                   onClick={(e) => e.stopPropagation()}
                   value={group.name}
@@ -1764,15 +1811,15 @@ function RuleConstructorV2() {
                 />
               </div>
               <span>
-                {group.rules.length} правил <i>⌄</i>
+                {group.rules.length} {tr("rules", "правил")} <i>⌄</i>
               </span>
             </summary>
             {group.rules.map((rule, ri) => (
               <article className="rule-card" key={`${rule.id}-${ri}`}>
                 <div className="rule-card-head">
-                  <strong>Правило {rule.id}</strong>
+                  <strong>{tr("Rule", "Правило")} {rule.id}</strong>
                   <label>
-                    Уровень{" "}
+                    {tr("Level", "Уровень")}{" "}
                     <input
                       type="number"
                       min="0"
@@ -1818,17 +1865,17 @@ function RuleConstructorV2() {
                   {
                     id: "100900",
                     level: "5",
-                    body: "<description>Новое исключение</description>\n<match>условие</match>",
+                    body: tr("<description>New exception</description>\n<match>condition</match>", "<description>Новое исключение</description>\n<match>условие</match>"),
                   },
                 ],
               },
             ])
           }
         >
-          Добавить исключение
+          {tr("Add exception", "Добавить исключение")}
         </button>
         <button className="check-button" onClick={save} disabled={saving}>
-          {saving ? "СОХРАНЯЮ…" : "СОХРАНИТЬ ПРАВИЛА"}
+          {saving ? tr("SAVING…", "СОХРАНЯЮ…") : tr("SAVE RULES", "СОХРАНИТЬ ПРАВИЛА")}
         </button>
       </div>
     </div>

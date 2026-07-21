@@ -8,11 +8,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Wazuh Journal — лента алертов SOC",
-  description: "Удобная лента событий Wazuh с AI-анализом и управлением правилами.",
+  title: "Wazuh Journal — SOC alert feed",
+  description: "A focused Wazuh alert feed with AI-assisted analysis and rule management.",
   openGraph: {
     title: "Wazuh Journal",
-    description: "Сигналы, которые стоит увидеть.",
+    description: "Signals worth seeing.",
     images: [{ url: "/og.png", width: 1200, height: 630 }],
   },
   twitter: { card: "summary_large_image", images: ["/og.png"] },
@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru">
+    <html lang="en">
       <body className={`${geistMono.variable} antialiased`}>
         {children}
       </body>

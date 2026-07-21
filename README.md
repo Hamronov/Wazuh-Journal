@@ -1,6 +1,8 @@
 # Wazuh Journal
 
-Локальный SOC-интерфейс для просмотра реальной ленты алертов Wazuh и анализа одного выбранного события через OpenAI-совместимый API.
+A source-available SOC interface for viewing live Wazuh alerts and analyzing selected events through an OpenAI-compatible API. The interface is available in English by default and can be switched to Russian.
+
+Русская версия интерфейса включается переключателем `EN / RU`.
 
 ## Требования
 
@@ -47,3 +49,7 @@ npm run lint
 - `AD_TENANT_ID`, `AD_CLIENT_ID`, `AD_CLIENT_SECRET` — будущая серверная авторизация Active Directory.
 
 Приложение не генерирует и не подставляет тестовые события. При недоступности интеграции отображается явная ошибка. Один запрос анализа всегда содержит только один выбранный алерт.
+
+## License
+
+Source code is available for personal, educational, research, and other non-commercial use under the custom [Wazuh Journal Non-Commercial License](LICENSE). Commercial use requires a separate written license from the copyright holder.
