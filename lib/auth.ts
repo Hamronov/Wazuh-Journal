@@ -34,8 +34,8 @@ export async function currentSession(cookieHeader:string|undefined):Promise<Sess
 }
 export async function requireSession(request:Request){return currentSession(request.headers.get("cookie")||undefined)}
 
-export function sessionCookie(session:Session){return `${cookieName}=${Buffer.from(JSON.stringify(session)).toString("base64url")}.${sign(Buffer.from(JSON.stringify(session)).toString("base64url"))}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV==="production"?"; Secure":""}`}
-export function clearSessionCookie(){return `${cookieName}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV==="production"?"; Secure":""}`}
+export function sessionCookie(session:Session){return `${cookieName}=${Buffer.from(JSON.stringify(session)).toString("base64url")}.${sign(Buffer.from(JSON.stringify(session)).toString("base64url"))}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secureCookieAttribute()}`}
+export function clearSessionCookie(){return `${cookieName}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secureCookieAttribute()}`}
 function createSession(user:string){const session={user,exp:Math.floor(Date.now()/1000)+maxAge};return{session,cookie:sessionCookie(session)}}
 function sign(value:string){return createHmac("sha256",secret()).update(value).digest("base64url")}
 function secret(){
@@ -43,4 +43,8 @@ function secret(){
   if(configured)return configured;
   if(process.env.NODE_ENV==="production")throw new Error("AUTH_SESSION_SECRET is required in production");
   return "local-wazuh-session-secret";
+}
+function secureCookieAttribute(){
+  if(process.env.AUTH_COOKIE_SECURE?.trim().toLowerCase()==="false")return "";
+  return process.env.NODE_ENV==="production"?"; Secure":"";
 }
