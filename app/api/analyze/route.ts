@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
-  const alert = await request.json();
+  let alert: Record<string, unknown>;
+  try {
+    alert = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   if (!alert?.id || !alert?.title) return NextResponse.json({ error: "Invalid alert" }, { status: 400 });
 
   const baseUrl = process.env.OPENAI_BASE_URL;
@@ -32,5 +37,11 @@ export async function POST(request: Request) {
   const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content;
   if (!content) return NextResponse.json({ error: "Empty AI response" }, { status: 502 });
-  return NextResponse.json(JSON.parse(content));
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    const falsePositive = Number(parsed.falsePositive);
+    return NextResponse.json({ ...parsed, falsePositive: Number.isFinite(falsePositive) ? Math.max(0, Math.min(100, falsePositive)) : 20 });
+  } catch {
+    return NextResponse.json({ error: "Invalid AI response" }, { status: 502 });
+  }
 }

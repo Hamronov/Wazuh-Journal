@@ -26,6 +26,8 @@ export default function Home() {
   const [result, setResult] = useState<Alert | null>(null);
   const [ruleAdded, setRuleAdded] = useState(false);
   const [filter, setFilter] = useState("Все уровни");
+  const [compactOpen, setCompactOpen] = useState<number | null>(null);
+  const visibleAlerts = alerts.filter((alert) => filter === "Все уровни" || alert.level >= 10);
 
   const analyze = async (alert: Alert) => {
     setSelected(alert); setResult(null); setRuleAdded(false); setAnalyzing(true);
@@ -56,7 +58,7 @@ export default function Home() {
       <section className="workspace">
         <div className="toolbar">
           <div className="date"><button>‹</button><span><small>ВТОРНИК</small>21 июля 2026</span><button>›</button></div>
-          <div className="filters"><button className="filter-primary">Новые <span>12</span></button><button>Критичные <span>3</span></button><button onClick={() => setFilter(filter === "Все уровни" ? "L10+" : "Все уровни")}>{filter}⌄</button></div>
+          <div className="filters"><button className="filter-primary" onClick={() => setFilter("Все уровни")}>Новые <span>12</span></button><button onClick={() => setFilter("L10+")}>Критичные <span>3</span></button><button onClick={() => setFilter(filter === "Все уровни" ? "L10+" : "Все уровни")} aria-pressed={filter === "L10+"}>{filter}⌄</button></div>
         </div>
 
         <article className={`batch ${open ? "expanded" : ""}`}>
@@ -66,7 +68,7 @@ export default function Home() {
             <span className="chevron">{open ? "↑" : "↓"}</span>
           </button>
           {open && <div className="alert-list">
-            {alerts.map((alert, index) => <div className="alert-row" key={alert.id}>
+            {visibleAlerts.length === 0 ? <div className="empty-state">Нет алертов, соответствующих фильтру.</div> : visibleAlerts.map((alert, index) => <div className="alert-row" key={alert.id}>
               <div className="timeline"><span>{alert.time}</span><i>{index + 1}</i></div>
               <div className="alert-main"><div className="alert-title"><Level value={alert.level}/><h2>{alert.title}</h2></div><p>{alert.detail}</p><div className="meta"><span>⌁ {alert.host}</span><span>◎ {alert.ip}</span><span>RULE {alert.rule}</span></div></div>
               <button className="analyze" onClick={() => analyze(alert)}>Анализировать <span>✦</span></button>
@@ -74,8 +76,10 @@ export default function Home() {
           </div>}
         </article>
 
-        <article className="batch compact"><button className="batch-head"><div className="batch-time"><span>14:18–14:23</span><small>5 АЛЕРТОВ · 5 МИНУТ</small></div><div className="severity"><Level value={8}/><span>1 высокий</span><span className="hostcount">3 хоста</span></div><span className="chevron">↓</span></button></article>
-        <article className="batch compact"><button className="batch-head"><div className="batch-time"><span>14:07–14:12</span><small>5 АЛЕРТОВ · 5 МИНУТ</small></div><div className="severity"><Level value={5}/><span>низкий риск</span><span className="hostcount">5 хостов</span></div><span className="chevron">↓</span></button></article>
+        {[{time:"14:18–14:23", level:8, label:"1 высокий", hosts:"3 хоста"}, {time:"14:07–14:12", level:5, label:"низкий риск", hosts:"5 хостов"}].map((batch, index) => <article className={`batch compact ${compactOpen === index ? "expanded" : ""}`} key={batch.time}>
+          <button className="batch-head" onClick={() => setCompactOpen(compactOpen === index ? null : index)} aria-expanded={compactOpen === index}><div className="batch-time"><span>{batch.time}</span><small>5 АЛЕРТОВ · 5 МИНУТ</small></div><div className="severity"><Level value={batch.level}/><span>{batch.label}</span><span className="hostcount">{batch.hosts}</span></div><span className="chevron">{compactOpen === index ? "↑" : "↓"}</span></button>
+          {compactOpen === index && <div className="compact-note">Пачка свернута в демонстрационном режиме. Подключите Wazuh bridge, чтобы загрузить события.</div>}
+        </article>)}
       </section>
 
       <footer><span>WAZUH JOURNAL / SOC-01</span><span><i className="status-dot"/> SSH · ПОДКЛЮЧЕНО</span><span>15 СЕК ДО ОБНОВЛЕНИЯ</span></footer>
