@@ -6,7 +6,7 @@
 
 ## Структура
 
-- `app/page.tsx` — основной экран, демонстрационные алерты и интерактивные сценарии.
+- `app/page.tsx` — основной экран реальной ленты алертов и интерактивные сценарии.
 - `app/globals.css` — визуальная система Monad: parchment, serif + monospace, hairline borders, pill-кнопки.
 - `app/api/analyze/route.ts` — серверный endpoint анализа одного алерта.
 - `.env.example` — переменные Wazuh SSH, Active Directory и OpenAI-compatible API.
@@ -26,7 +26,7 @@ npm run lint
 
 ## Интеграции
 
-`WAZUH_SSH_HOST`, `WAZUH_SSH_PORT`, `WAZUH_SSH_USER`, `WAZUH_SSH_PRIVATE_KEY` предназначены для server-side SSH bridge. Не помещать ключи в клиентский код, `public/` или browser storage. Текущий UI использует демонстрационные данные.
+`WAZUH_SSH_HOST`, `WAZUH_SSH_PORT`, `WAZUH_SSH_USER`, `WAZUH_SSH_PRIVATE_KEY` предназначены для server-side SSH bridge. Не помещать ключи в клиентский код, `public/` или browser storage. При недоступности Wazuh интерфейс обязан показывать ошибку и не подставлять события.
 
 `AD_TENANT_ID`, `AD_CLIENT_ID`, `AD_CLIENT_SECRET` предназначены для серверной авторизации. Проверку пользователя и права доступа выполнять на сервере или через Sites access policy.
 
