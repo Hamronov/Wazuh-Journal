@@ -101,6 +101,7 @@ AI analysis is optional. If `OPENAI_*` variables are not configured, the feed re
 | Variable | Purpose |
 | --- | --- |
 | `AUTH_SESSION_SECRET` | Session-signing secret. Required in production; use a random value of at least 32 characters. |
+| `AUTH_COOKIE_SECURE` | Keep `true` for HTTPS. Set to `false` only for trusted LAN deployments that must use plain HTTP. |
 | `AD_TENANT_ID` | Optional Active Directory tenant identifier. |
 | `AD_CLIENT_ID` | Optional directory application identifier. |
 | `AD_CLIENT_SECRET` | Optional directory application secret. |
