@@ -43,6 +43,7 @@ type Analysis = {
   status?: "processing" | "error" | "success";
   ruleAdded?: boolean;
   ruleId?: number;
+  ruleAction?: "added" | "updated";
   falsePositive: number;
   verdict: string;
   summary: string;
@@ -517,7 +518,14 @@ function Journal() {
       if (!response.ok)
         throw new Error(data.error || tr("Unable to add rule", "Не удалось добавить правило"));
       setRuleAddState("added");
-      setRuleNotice(tr("Rule added; Wazuh Manager restarted", "Правило добавлено, Wazuh Manager перезапущен"));
+      setAnalysis((current) =>
+        current ? { ...current, ruleAction: data.action } : current,
+      );
+      setRuleNotice(
+        data.action === "updated"
+          ? tr("Rule updated; Wazuh Manager restarted", "Правило обновлено, Wazuh Manager перезапущен")
+          : tr("Rule added; Wazuh Manager restarted", "Правило добавлено, Wazuh Manager перезапущен"),
+      );
       await loadAnalysisHistory();
       window.setTimeout(() => setRuleNotice(""), 5000);
     } catch (error) {
@@ -818,16 +826,18 @@ function Journal() {
                         }
                       >
                         {ruleAddState === "adding"
-                          ? tr("ADDING AND RESTARTING…", "ДОБАВЛЯЮ И ПЕРЕЗАПУСКАЮ…")
+                          ? tr("APPLYING AND RESTARTING…", "ПРИМЕНЯЮ И ПЕРЕЗАПУСКАЮ…")
                           : ruleAddState === "added"
-                            ? tr("RULE ADDED · MANAGER RESTARTED", "ПРАВИЛО ДОБАВЛЕНО · MANAGER ПЕРЕЗАПУЩЕН")
-                            : tr("ADD RULE AND RESTART", "ДОБАВИТЬ ПРАВИЛО И ПЕРЕЗАПУСТИТЬ")}
+                            ? analysis.ruleAction === "updated"
+                              ? tr("RULE UPDATED · MANAGER RESTARTED", "ПРАВИЛО ОБНОВЛЕНО · MANAGER ПЕРЕЗАПУЩЕН")
+                              : tr("RULE ADDED · MANAGER RESTARTED", "ПРАВИЛО ДОБАВЛЕНО · MANAGER ПЕРЕЗАПУЩЕН")
+                            : tr("APPLY RULE AND RESTART", "ПРИМЕНИТЬ ПРАВИЛО И ПЕРЕЗАПУСТИТЬ")}
                       </button>
                       {ruleAddError && (
                         <p className="settings-error">{ruleAddError}</p>
                       )}
                       <small>
-                        {tr("The rule will be added to the exceptions group with level 0 and a new available ID.", "Правило будет добавлено в группу исключений с уровнем 0 и новым свободным номером.")}
+                        {tr("An existing level 0 exception will keep its ID and be updated; otherwise a new exception will be added.", "Существующее исключение level 0 сохранит ID и будет обновлено; иначе добавится новое исключение.")}
                       </small>
                     </div>
                   )}
@@ -899,7 +909,7 @@ function Journal() {
                       </span>
                       <small>
                         {item.analysis.ruleAdded
-                          ? `${tr("Rule", "Правило")} ${item.analysis.ruleId || ""} ${tr("added", "добавлено")}`
+                          ? `${tr("Rule", "Правило")} ${item.analysis.ruleId || ""} ${item.analysis.ruleAction === "updated" ? tr("updated", "обновлено") : tr("added", "добавлено")}`
                           : item.analysis.status === "processing"
                           ? tr("Processing", "В обработке")
                           : item.analysis.status === "error"

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { loadLocalSettings } from "@/lib/local-settings";
 import { requireSession } from "@/lib/auth";
 import { appendAnalysis, updateAnalysis } from "@/lib/analysis-history";
+import { runWazuhCommand } from "@/lib/wazuh";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const rulesPath = "/var/ossec/etc/rules/local_rules.xml";
 
 export async function POST(request: Request) {
   const session = await requireSession(request);
@@ -55,8 +61,6 @@ export async function POST(request: Request) {
     summary: String(alert.story || alert.detail || "").slice(0, 700),
     fields: Array.isArray(alert.fields) ? alert.fields.slice(0, 8) : [],
   }));
-  const existingRules =
-    "Актуальное XML проверяется на сервере при добавлении правила.";
   const stored = await appendAnalysis({
     user: session.user,
     alert: validAlerts.length === 1 ? validAlerts[0] : { alerts: validAlerts },
@@ -66,6 +70,19 @@ export async function POST(request: Request) {
     await updateAnalysis(stored.id, { analysis: { status: "error", verdict: "Ошибка", summary: message, falsePositive: 0, ruleXml: "" } });
     return NextResponse.json({ error: message, historyId: stored.id }, { status });
   };
+  let existingRules: string;
+  try {
+    existingRules = await runWazuhCommand(
+      `sudo -S -p '' su -c 'cat ${rulesPath}'`,
+    );
+  } catch (error) {
+    return fail(
+      error instanceof Error
+        ? `Не удалось прочитать действующие правила Wazuh: ${error.message}`
+        : "Не удалось прочитать действующие правила Wazuh",
+      503,
+    );
+  }
   let response: Response;
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
@@ -77,13 +94,13 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         temperature: 0.1,
-        max_tokens: 500,
+        max_tokens: 900,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
             content:
-              "Ты SOC-аналитик. Проанализируй один или несколько алертов как единый инцидент. Если это ложное срабатывание, предложи одно узкое черновое Wazuh XML-правило level 0. Объясни параметры исключения кратко. Верни компактный JSON только с полями falsePositive (0-100), verdict, summary, exceptionExplanation, ruleXml. Если правило не нужно, ruleXml пустой. Не придумывай факты.",
+              "Ты SOC-аналитик. Проанализируй один или несколько алертов как единый инцидент и обязательно сопоставь их с existingRules — актуальным local_rules.xml. Сначала проверь, есть ли уже узкое исключение level 0, которое должно было подавить эти алерты. Если оно есть, объясни в exceptionExplanation, почему оно не сработало: какое условие, поле, значение, if_sid/if_group или порядок правил не совпали с алертом. Затем верни в ruleXml исправленную полную версию именно этого <rule> с тем же id. Не меняй обычное детектирующее правило: изменять можно только явно подходящее исключение level 0. Если подходящего исключения нет и это ложное срабатывание, предложи одно новое узкое черновое Wazuh XML-правило level 0; для нового правила id не указывай. Не расширяй исключение больше необходимого. Верни компактный JSON только с полями falsePositive (0-100), verdict, summary, exceptionExplanation, ruleXml. Если правило не нужно, ruleXml пустой. Не придумывай отсутствующие поля или факты.",
           },
           {
             role: "user",
