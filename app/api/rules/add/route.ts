@@ -30,6 +30,20 @@ function prepareRule(ruleXml: string, id: number) {
   return `<rule id="${id}" level="0">\n${body}\n</rule>`;
 }
 
+function requestedRuleId(ruleXml: string) {
+  const match = ruleXml.match(/<rule\b[^>]*\bid\s*=\s*["'](\d+)["']/i);
+  return match ? Number(match[1]) : null;
+}
+
+function replaceExistingRule(xml: string, id: number, rule: string) {
+  const matcher = new RegExp(
+    `<rule\\b(?=[^>]*\\bid\\s*=\\s*["']${id}["'])[^>]*>[\\s\\S]*?<\\/rule>`,
+    "i",
+  );
+  if (!matcher.test(xml)) return null;
+  return xml.replace(matcher, rule);
+}
+
 export async function POST(request: Request) {
   if (!(await requireSession(request)))
     return NextResponse.json(
@@ -44,15 +58,28 @@ export async function POST(request: Request) {
     if (typeof body.ruleXml !== "string" || !body.ruleXml.trim())
       throw new Error("Пустое XML-правило");
     const existing = await runWazuhCommand(`sudo -S -p '' su -c 'cat ${path}'`);
-    const id = nextRuleId(existing);
+    const requestedId = requestedRuleId(body.ruleXml);
+    const existingRule = requestedId
+      ? existing.match(
+          new RegExp(
+            `<rule\\b(?=[^>]*\\bid\\s*=\\s*["']${requestedId}["'])[^>]*>[\\s\\S]*?<\\/rule>`,
+            "i",
+          ),
+        )?.[0]
+      : undefined;
+    if (existingRule && !/<rule\b[^>]*\blevel\s*=\s*["']0["']/i.test(existingRule))
+      throw new Error("AI попытался изменить не исключение level 0");
+    const updating = Boolean(existingRule && requestedId);
+    const id = updating ? requestedId! : nextRuleId(existing);
     const rule = prepareRule(body.ruleXml, id);
     const group = /<group\s+name=["']ai_suppressions,["'][^>]*>/i;
-    const next = group.test(existing)
+    const replaced = updating ? replaceExistingRule(existing, id, rule) : null;
+    const next = replaced ?? (group.test(existing)
       ? existing.replace(
           /(<group\s+name=["']ai_suppressions,["'][^>]*>[\s\S]*?)(<\/group>)/i,
           `$1\n  ${rule.replace(/\n/g, "\n  ")}\n$2`,
         )
-      : `${existing.trim()}\n\n<group name="ai_suppressions,">\n  ${rule.replace(/\n/g, "\n  ")}\n</group>\n`;
+      : `${existing.trim()}\n\n<group name="ai_suppressions,">\n  ${rule.replace(/\n/g, "\n  ")}\n</group>\n`);
     const encoded = Buffer.from(next, "utf8").toString("base64");
     await runWazuhCommand(
       `sudo -S -p '' su -c 'cp ${path} ${path}.bak && printf %s ${encoded} | base64 -d > ${path}.tmp && chown root:wazuh ${path}.tmp && chmod 660 ${path}.tmp && mv ${path}.tmp ${path} && systemctl restart wazuh-manager'`,
@@ -62,13 +89,15 @@ export async function POST(request: Request) {
         analysis: {
           ruleAdded: true,
           ruleId: id,
+          ruleAction: updating ? "updated" : "added",
         },
       });
     }
     return NextResponse.json({
       ok: true,
       id,
-      group: "ai_suppressions",
+      action: updating ? "updated" : "added",
+      group: updating ? undefined : "ai_suppressions",
       level: 0,
       historyId:
         typeof body.historyId === "string" ? body.historyId : undefined,
